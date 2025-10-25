@@ -1,7 +1,6 @@
 "use strict";
 
-const utils = require('../../../utils');
-
+const utils = require("../utils");
 /**
  * @fix by JaymarDev
  * @module profileGuard
@@ -13,8 +12,14 @@ const utils = require('../../../utils');
  * @param {object} ctx - Context object containing user session data
  * @returns {Function} profileGuard function
  */
-module.exports = function (defaultFuncs, api, ctx) {
-  /**
+module.exports = (defaultFuncs, api, ctx) => {
+  return (guard, callback = () => {}) => {
+    if (utils.getType(guard) !== "Boolean") {
+      throw {
+        error: "Please pass a boolean as a second argument.",
+      };
+    }
+    /**
    * Toggle Facebook Profile Picture Guard on or off
    * 
    * @param {boolean} enable - true to enable guard, false to disable
@@ -38,103 +43,36 @@ module.exports = function (defaultFuncs, api, ctx) {
    *   console.log('Guard enabled:', result);
    * });
    */
-  return async function profileGuard(enable, userID, callback) {
-    let resolveFunc = function () {};
-    let rejectFunc = function () {};
-
-    const returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
-
-    // Handle optional parameters
-    if (utils.getType(userID) === "Function" || utils.getType(userID) === "AsyncFunction") {
-      callback = userID;
-      userID = null;
+    const uid = ctx.userID;
+    const form = {
+      av: uid,
+      variables: JSON.stringify({
+        input: {
+          is_shielded: guard ? true : false,
+          actor_id: uid,
+          client_mutation_id: "1"
+        },
+        scale: 1
+      }),
+      doc_id: "1477043292367183",
+      fb_api_req_friendly_name: "IsShieldedSetMutation",
+      fb_api_caller_class: "IsShieldedSetMutation"
     }
 
-    callback = callback || function (err, data) {
-      if (err) return rejectFunc(err);
-      resolveFunc(data);
-    };
-
-    // Validate enable parameter
-    if (typeof enable !== 'boolean') {
-      const error = new Error('profileGuard: First parameter must be a boolean (true to enable, false to disable)');
-      utils.error('profileGuard', error);
-      return callback(error);
-    }
-
-    // Use provided userID or default to current user
-    const targetUserID = userID || ctx.userID;
-
-    if (!targetUserID) {
-      const error = new Error('profileGuard: User ID not found. Please ensure you are logged in.');
-      utils.error('profileGuard', error);
-      return callback(error);
-    }
-
-    try {
-      // Get access token from cookies
-      const cookies = ctx.jar.getCookiesSync('https://www.facebook.com');
-      let accessToken = null;
-
-      // Try to find access token in cookies
-      for (const cookie of cookies) {
-        const cookieStr = cookie.cookieString();
-        if (cookieStr.includes('access_token=')) {
-          accessToken = cookieStr.split('access_token=')[1].split(';')[0];
-          break;
+    return defaultFuncs
+      .post("https://www.facebook.com/api/graphql", ctx.jar, form)
+      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
+      .then(function(resData) {
+        if (resData.err) {
+          throw {
+            err: resData.err
+          };
         }
-      }
-
-      // If no access token in cookies, we'll use the GraphQL endpoint without OAuth header
-      // Facebook's GraphQL API can work with session cookies
-      const form = {
-        variables: JSON.stringify({
-          "0": {
-            "is_shielded": enable,
-            "actor_id": targetUserID,
-            "client_mutation_id": utils.generateOfflineThreadingID()
-          }
-        }),
-        doc_id: "1477043292367183"
-      };
-
-      const customHeader = {};
-      if (accessToken) {
-        customHeader.Authorization = 'OAuth ' + accessToken;
-      }
-
-      utils.log('profileGuard', `${enable ? 'Enabling' : 'Disabling'} profile picture guard for user ${targetUserID}`);
-
-      const response = await defaultFuncs
-        .post('https://graph.facebook.com/graphql', ctx.jar, form, {}, customHeader)
-        .then(utils.parseAndCheckLogin(ctx, defaultFuncs));
-
-      if (response.error || response.errors) {
-        throw new Error(
-          response.error 
-            ? response.error 
-            : JSON.stringify(response.errors)
-        );
-      }
-
-      const result = {
-        success: true,
-        enabled: enable,
-        userID: targetUserID,
-        message: `Profile picture guard ${enable ? 'enabled' : 'disabled'} successfully`
-      };
-
-      utils.log('profileGuard', result.message);
-      callback(null, result);
-
-    } catch (error) {
-      utils.error('profileGuard', error);
-      callback(error);
-    }
-
-    return returnPromise;
+        return callback();
+      })
+      .catch(err => {
+        utils.error("setProfileGuard", err);
+        return callback(err);
+      });;
   };
 };

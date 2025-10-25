@@ -162,7 +162,7 @@ login(credentials, {
 
 ## 🙌 Credits
 
-* ✨ **@Jaymardev (Heru)** – Modified and enhanced version, added Profile Guard, Lock Profile, and React Post features.
+* ✨ **@Jaymardev (Heru)** – Modified and enhanced version, added Profile Guard, and React Post features.
 * 🔧 **@NethWs3Dev (Kenneth Aceberos)** – Original main developer and maintainer.
 * 💧 **@ChoruOfficial** – Lead developer, refactor of original FCA code, MQTT implementation.
 
